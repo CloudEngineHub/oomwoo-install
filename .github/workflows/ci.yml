@@ -69,6 +69,28 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc || true
           df -h /
 
+      - name: Remove the runner's Firefox (its snap-transition deb needs the Snap Store)
+        # `apt full-upgrade` below pulls firefox 1:1snap1, whose PRE-INSTALL
+        # script installs the Firefox *snap* -- so the installer silently gains a
+        # hard dependency on api.snapcraft.io. When the store is slow or down,
+        # dpkg fails, apt exits 100, and the whole job goes red for a reason that
+        # has nothing to do with this repo. Three nightlies lost to it so far:
+        # 2026-08-28 (HTTP 408 fetching the gnome-46-2404 assertion), 2026-11-11
+        # and 2026-11-12 ("unable to contact snap store").
+        #
+        # A headless Pi image carries no Firefox, so removing it makes the runner
+        # MORE faithful to the target, not less. Keep `apt full-upgrade` itself:
+        # it is what applies the noble-updates packages after the installer
+        # repairs that pocket, which is the point of this job.
+        run: |
+          sudo apt-get purge -y firefox || true
+          sudo snap remove --purge firefox || true
+          if dpkg -s firefox >/dev/null 2>&1; then
+            echo "::warning::firefox still installed; apt full-upgrade may hit the Snap Store"
+          else
+            echo "ok  firefox absent -- full-upgrade will not touch the Snap Store"
+          fi
+
       - name: Reproduce the broken-image condition (strip noble-updates)
         # The Pi image that blocked the ROS install carried only noble +
         # noble-security. Recreate that here so the repair is a real regression
